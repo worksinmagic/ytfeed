@@ -5,3 +5,4 @@
 /full_test.sh
 /*.log
 /experiments
+/coverage.out
