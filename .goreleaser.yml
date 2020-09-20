@@ -1,0 +1,25 @@
+# .goreleaser.yml
+before:
+  hooks:
+    - go mod download
+builds:
+  - 
+    main: ./cmd/ytfeed/main.go
+    binary: ytfeed
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+    mod_timestamp: '{{ .CommitTimestamp }}'
+dockers:
+  - 
+    dockerfile: Dockerfile
+    goos: linux
+    goarch: amd64
+    binaries:
+    - ytfeed
+    image_templates:
+    - "worksinmagic/ytfeed:{{ .Tag }}"
+    - "worksinmagic/ytfeed:latest"
