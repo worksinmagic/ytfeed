@@ -21,7 +21,7 @@ install:
   - sudo apt-get -y install youtube-dl ffmpeg
   - if [[ "${GO111MODULE}" = "on" ]]; then go mod download; else go get -t -v ./...; fi
   - npm install -g snyk
-  - go install github.com/golangci/golangci-lint/cmd/golangci-lint
+  - GO111MODULE=off go install github.com/golangci/golangci-lint/cmd/golangci-lint
 
 script:
   - docker run -d -p 127.0.0.1:9000:9000 -e "MINIO_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE" -e "MINIO_SECRET_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" minio/minio server /data
