@@ -81,7 +81,8 @@ Your ol' plain `go build cmd/ytfeed/main.go`
 
 ## Usage
 
-Either create `.env` or use shellscript to set the required environment variables and run the binary.
+Either create `.env` or use shellscript to set the required environment variables and run the binary like `./ytfeed`
+and you'll see log messages if it runs.
 
 ## How to Contribute
 
