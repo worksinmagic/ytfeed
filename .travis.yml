@@ -13,15 +13,15 @@ matrix:
 
 before_install:
   - sudo apt-get update
-  - curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.35.2/install.sh | bash
   - docker pull minio/minio
+  - curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.35.2/install.sh | bash
   - nvm install 12.18.3
 
 install:
   - sudo apt-get -y install youtube-dl ffmpeg
-  - if [[ "${GO111MODULE}" = "on" ]]; then go mod download; else go get -t -v ./...; fi
   - npm install -g snyk
-  - GO111MODULE=off go install github.com/golangci/golangci-lint/cmd/golangci-lint
+  - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.31.0
+  - if [[ "${GO111MODULE}" = "on" ]]; then go mod download; else go get -t -v ./...; fi
 
 script:
   - docker run -d -p 127.0.0.1:9000:9000 -e "MINIO_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE" -e "MINIO_SECRET_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" minio/minio server /data
