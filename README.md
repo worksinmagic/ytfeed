@@ -11,6 +11,7 @@ Automatic Youtube video and stream archiver.
 ## Note
 
 - You **MUST** install [youtube-dl](https://github.com/ytdl-org/youtube-dl) first and **MUST** be available at `$PATH`.
+- You **MUST** install [ffmpeg](https://ffmpeg.org/) too for this to work.
 - To run s3 test or complete suite test, you need to run `test_s3.sh` for it to start a Minio server. You can stop it or delete it after testing by running `test_s3_teardown.sh`
 - You also need to set `YTFEED_YOUTUBE_API_KEY`, `YTFEED_YOUTUBE_VIDEO_ID`, and `YTFEED_YOUTUBE_VIDEO_URL` to do a complete suite test.
 - You can redo failed download by sending a `POST` request with the XML message in the log as the body.
