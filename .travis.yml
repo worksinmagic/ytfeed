@@ -2,6 +2,11 @@ language: go
 sudo: false
 dist: focal
 
+branches:
+  only:
+    - master
+    - development
+
 services:
   - docker
 
