@@ -67,6 +67,7 @@ Example of fairly common configuration is:
 
 ```
 export YTFEED_VERIFICATION_TOKEN='sometoken'
+export YTFEED_VERIFICATION_SECRET='somesecret' 
 export YTFEED_RESUB_TOPIC="https://www.youtube.com/xml/feeds/videos.xml?channel_id=channelid"
 export YTFEED_RESUB_CALLBACK_ADDR='https://my.server.addr/path'
 export YTFEED_STORAGE_BACKEND='s3'
