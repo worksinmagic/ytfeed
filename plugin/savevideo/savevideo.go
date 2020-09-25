@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -74,7 +75,7 @@ type FilenameTemplater interface {
 }
 
 type StreamScheduler interface {
-	RegisterSchedule(runAt time.Time, xmlData, videoURL string) (err error)
+	RegisterSchedule(runAt time.Time, data *ytfeed.Data) error
 }
 
 type SaveVideo struct {
@@ -89,6 +90,7 @@ type SaveVideo struct {
 	tmpDir               string
 	maxRetries           int
 	retryDelay           time.Duration
+	downloadingVideoLock sync.Mutex
 }
 
 func (s *SaveVideo) DataHandler(ctx context.Context, d *ytfeed.Data) {
@@ -111,9 +113,16 @@ func (s *SaveVideo) DataHandler(ctx context.Context, d *ytfeed.Data) {
 		s.logger.Warnf("Already downloading video %s", entry.LinkURL)
 		return
 	}
+
 	// set the downloading status
+	s.downloadingVideoLock.Lock()
 	s.downloadingVideo[entry.LinkURL] = DownloadingVideoStatus
-	defer delete(s.downloadingVideo, entry.LinkURL)
+	s.downloadingVideoLock.Unlock()
+	defer func() {
+		s.downloadingVideoLock.Lock()
+		delete(s.downloadingVideo, entry.LinkURL)
+		s.downloadingVideoLock.Unlock()
+	}()
 
 	vlcall := s.vs.List(defaultParts)
 	vlcall = vlcall.Id(entry.VideoID)
@@ -185,7 +194,7 @@ func (s *SaveVideo) DataHandler(ctx context.Context, d *ytfeed.Data) {
 				return
 			}
 			s.logger.Infof("Registering video %s to scheduler to be ran at %s", entry.LinkURL, runAt)
-			err = s.streamScheduler.RegisterSchedule(runAt, d.OriginalXMLMessage, entry.LinkURL)
+			err = s.streamScheduler.RegisterSchedule(runAt, d)
 			if err != nil {
 				s.logger.Errorf("Failed to register schedule for stream video %s: %v. Original message was: `%s`", entry.LinkURL, err, d.OriginalXMLMessage)
 				return

@@ -2,10 +2,6 @@ package streamschedule
 
 import (
 	"context"
-	"fmt"
-	"io/ioutil"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -14,50 +10,51 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/worksinmagic/ytfeed"
 	"github.com/worksinmagic/ytfeed/mock"
 )
 
 const (
-	invalidXmlData        = "invalid"
-	xmlData               = "valid"
-	specialInvalidXMLData = "special invalid"
+	videoURL  = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+	videoURL2 = "https://www.youtube.com/watch?v=989-7xsRLR4"
+	xmlData   = "xml data"
 )
 
 func TestStreamSchedule(t *testing.T) {
-	invalidCount := 0
-	maxInvalidCount := 1
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+	// handler must be run exactly twice for different video URL
+	// and sent videoURL must be different than the previous one
+	runTimes := 0
+	runVideoURL := ""
+	mockDataHandler := func(ctx context.Context, d *ytfeed.Data) {
+		require.NotNil(t, d)
 
-		// make sure the data received is correct
-		data, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			panic(err)
+		if runVideoURL != "" {
+			require.NotEqual(t, runVideoURL, d.Feed.Entry.Link.Href)
 		}
 
-		if string(data) != xmlData {
-			if string(data) == specialInvalidXMLData {
-				w.WriteHeader(http.StatusBadRequest)
-			} else {
-				if invalidCount < maxInvalidCount {
-					w.WriteHeader(http.StatusBadRequest)
-					invalidCount++
-				}
-			}
+		runVideoURL = d.Feed.Entry.Link.Href
+		runTimes++
+	}
+
+	// handler must be run exactly twice for same video URL
+	// and sent videoURL must be the same as the previous one
+	runTimes2 := 0
+	runVideoURL2 := ""
+	mockDataHandler2 := func(ctx context.Context, d *ytfeed.Data) {
+		require.NotNil(t, d)
+
+		if runVideoURL2 != "" {
+			require.Equal(t, runVideoURL2, d.Feed.Entry.Link.Href)
 		}
 
-		fmt.Fprintln(w, "RESPONSE")
-	}))
-	defer ts.Close()
-
-	targetURL := ts.URL
-	retryDelay := time.Millisecond
-	workerInterval := 100 * time.Millisecond
+		runVideoURL2 = d.Feed.Entry.Link.Href
+		runTimes2++
+	}
 
 	var wg sync.WaitGroup
 
 	wg.Add(1)
-	t.Run("RunWorker success", func(t *testing.T) {
+	t.Run("RunWorker success with different video URL", func(t *testing.T) {
 		defer wg.Done()
 
 		databasePath := filepath.Join(os.TempDir(), "database.db")
@@ -68,25 +65,44 @@ func TestStreamSchedule(t *testing.T) {
 
 		logger := mock.NewMockLogger(ctrl)
 
-		s, err := New(logger, databasePath, targetURL, retryDelay, workerInterval, InfiniteRetries)
+		workerInterval := 10 * time.Millisecond
+
+		s, err := New(logger, databasePath, workerInterval)
 		require.NoError(t, err)
 		require.NotNil(t, s)
 
-		videoURL := "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-		err = s.RegisterSchedule(time.Now(), xmlData, videoURL)
-		require.NoError(t, err)
+		s.RegisterDataHandler(mockDataHandler)
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		go func() {
+			data := &ytfeed.Data{}
+			data.OriginalXMLMessage = xmlData
+			data.Feed.Entry.Link.Href = videoURL
+
+			err := s.RegisterSchedule(time.Now().Add(100*time.Millisecond), data)
+			require.NoError(t, err)
+		}()
+
+		go func() {
+			data2 := &ytfeed.Data{}
+			data2.OriginalXMLMessage = xmlData
+			data2.Feed.Entry.Link.Href = videoURL2
+
+			err := s.RegisterSchedule(time.Now().Add(100*time.Millisecond), data2)
+			require.NoError(t, err)
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
 
 		err = s.RunWorker(ctx)
 		require.NoError(t, err)
+		require.Equal(t, 2, runTimes)
 	})
 
 	wg.Wait()
 
 	wg.Add(1)
-	t.Run("RunWorker failed", func(t *testing.T) {
+	t.Run("RunWorker success with same video URL", func(t *testing.T) {
 		defer wg.Done()
 
 		databasePath := filepath.Join(os.TempDir(), "database.db")
@@ -97,60 +113,38 @@ func TestStreamSchedule(t *testing.T) {
 
 		logger := mock.NewMockLogger(ctrl)
 
-		s, err := New(logger, databasePath, targetURL, retryDelay, workerInterval, InfiniteRetries)
+		workerInterval := 10 * time.Millisecond
+
+		s, err := New(logger, databasePath, workerInterval)
 		require.NoError(t, err)
 		require.NotNil(t, s)
 
-		videoURL := "https://www.youtube.com/watch?v=d1YBv2mWll0"
-		err = s.RegisterSchedule(time.Now(), invalidXmlData, videoURL)
-		require.NoError(t, err)
+		s.RegisterDataHandler(mockDataHandler2)
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		go func() {
+			data := &ytfeed.Data{}
+			data.OriginalXMLMessage = xmlData
+			data.Feed.Entry.Link.Href = videoURL
+
+			err := s.RegisterSchedule(time.Now().Add(100*time.Millisecond), data)
+			require.NoError(t, err)
+		}()
+
+		go func() {
+			data := &ytfeed.Data{}
+			data.OriginalXMLMessage = xmlData
+			data.Feed.Entry.Link.Href = videoURL
+
+			err := s.RegisterSchedule(time.Now().Add(100*time.Millisecond), data)
+			require.NoError(t, err)
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
-
-		logger.EXPECT().Errorf(
-			gomock.AssignableToTypeOf("main error"),
-			gomock.Any(),
-		)
 
 		err = s.RunWorker(ctx)
 		require.NoError(t, err)
-	})
-
-	wg.Wait()
-
-	wg.Add(1)
-	t.Run("RunWorker exceeding retries", func(t *testing.T) {
-		defer wg.Done()
-
-		databasePath := filepath.Join(os.TempDir(), "database.db")
-		defer os.Remove(databasePath)
-
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		logger := mock.NewMockLogger(ctrl)
-		retries := 1
-
-		s, err := New(logger, databasePath, targetURL, retryDelay, workerInterval, retries)
-		require.NoError(t, err)
-		require.NotNil(t, s)
-
-		videoURL := "https://www.youtube.com/watch?v=d1YBv2mWll0"
-		err = s.RegisterSchedule(time.Now(), specialInvalidXMLData, videoURL)
-		require.NoError(t, err)
-
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-
-		logger.EXPECT().Warnf(
-			gomock.AssignableToTypeOf("exceeding retries"),
-			gomock.AssignableToTypeOf("key"),
-			gomock.AssignableToTypeOf(retries),
-		)
-
-		err = s.RunWorker(ctx)
-		require.NoError(t, err)
+		require.Equal(t, 1, runTimes2)
 	})
 
 	wg.Wait()
@@ -164,9 +158,13 @@ func TestStreamSchedule(t *testing.T) {
 
 		logger := mock.NewMockLogger(ctrl)
 
-		s, err := New(logger, databasePath, targetURL, retryDelay, workerInterval, InfiniteRetries)
+		workerInterval := 50 * time.Millisecond
+
+		s, err := New(logger, databasePath, workerInterval)
 		require.NoError(t, err)
 		require.NotNil(t, s)
+
+		s.RegisterDataHandler(mockDataHandler)
 
 		err = s.CloseDatabase()
 		require.NoError(t, err)
