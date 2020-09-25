@@ -23,9 +23,16 @@ const (
 func TestStreamSchedule(t *testing.T) {
 	// handler must be run exactly twice for different video URL
 	// and sent videoURL must be different than the previous one
+	var mockDataHandlerWG sync.WaitGroup
+	var lock sync.Mutex
 	runTimes := 0
 	runVideoURL := ""
 	mockDataHandler := func(ctx context.Context, d *ytfeed.Data) {
+		defer mockDataHandlerWG.Done()
+
+		lock.Lock()
+		defer lock.Unlock()
+
 		require.NotNil(t, d)
 
 		if runVideoURL != "" {
@@ -38,9 +45,16 @@ func TestStreamSchedule(t *testing.T) {
 
 	// handler must be run exactly twice for same video URL
 	// and sent videoURL must be the same as the previous one
+	var mockDataHandlerWG2 sync.WaitGroup
+	var lock2 sync.Mutex
 	runTimes2 := 0
 	runVideoURL2 := ""
 	mockDataHandler2 := func(ctx context.Context, d *ytfeed.Data) {
+		defer mockDataHandlerWG2.Done()
+
+		lock2.Lock()
+		defer lock2.Unlock()
+
 		require.NotNil(t, d)
 
 		if runVideoURL2 != "" {
@@ -73,6 +87,7 @@ func TestStreamSchedule(t *testing.T) {
 
 		s.RegisterDataHandler(mockDataHandler)
 
+		mockDataHandlerWG.Add(1)
 		go func() {
 			data := &ytfeed.Data{}
 			data.OriginalXMLMessage = xmlData
@@ -82,6 +97,7 @@ func TestStreamSchedule(t *testing.T) {
 			require.NoError(t, err)
 		}()
 
+		mockDataHandlerWG.Add(1)
 		go func() {
 			data2 := &ytfeed.Data{}
 			data2.OriginalXMLMessage = xmlData
@@ -96,6 +112,9 @@ func TestStreamSchedule(t *testing.T) {
 
 		err = s.RunWorker(ctx)
 		require.NoError(t, err)
+
+		// wait until handler finished all req
+		mockDataHandlerWG.Wait()
 		require.Equal(t, 2, runTimes)
 	})
 
@@ -121,6 +140,7 @@ func TestStreamSchedule(t *testing.T) {
 
 		s.RegisterDataHandler(mockDataHandler2)
 
+		mockDataHandlerWG2.Add(1)
 		go func() {
 			data := &ytfeed.Data{}
 			data.OriginalXMLMessage = xmlData
@@ -130,6 +150,7 @@ func TestStreamSchedule(t *testing.T) {
 			require.NoError(t, err)
 		}()
 
+		mockDataHandlerWG.Add(1)
 		go func() {
 			data := &ytfeed.Data{}
 			data.OriginalXMLMessage = xmlData
@@ -144,6 +165,9 @@ func TestStreamSchedule(t *testing.T) {
 
 		err = s.RunWorker(ctx)
 		require.NoError(t, err)
+
+		// wait until handler finished all req
+		mockDataHandlerWG2.Wait()
 		require.Equal(t, 1, runTimes2)
 	})
 
