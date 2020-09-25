@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -18,6 +19,9 @@ func TestConfig(t *testing.T) {
 	mockValidator := mock.NewMockValidator(ctrl)
 
 	t.Run("Validate success", func(t *testing.T) {
+		version := "v100.0.0"
+		os.Setenv("YTFEED_VERSION", version)
+
 		cfg = New()
 		require.NotNil(t, cfg)
 		cfg.StorageBackend = StorageBackendDisk
@@ -28,6 +32,8 @@ func TestConfig(t *testing.T) {
 
 		err := cfg.Validate()
 		require.NoError(t, err)
+		require.Equal(t, version, cfg.Version)
+		require.Equal(t, DefaultHost, cfg.Host)
 	})
 
 	t.Run("Validate failed", func(t *testing.T) {

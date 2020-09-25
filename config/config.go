@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	DefaultVersion                       = "v1.0.0"
+	DefaultVersion                       = "v0.2.0"
 	DefaultHost                          = ":8123"
 	DefaultResubTargetAddr               = "https://pubsubhubbub.appspot.com/subscribe"
 	DefaultResubInterval                 = 24 * 3 * time.Hour
@@ -18,8 +18,6 @@ const (
 	DefaultFormatQuality                 = "720"
 	DefaultFormatExtension               = "webm"
 	DefaultRedisChannel                  = "ytfeed"
-	DefaultStreamSchedulerRetryDelay     = 1 * time.Minute
-	DefaultStreamSchedulerMaxRetries     = 5
 	DefaultStreamSchedulerWorkerInterval = 1 * time.Minute
 	DefaultVideoDownloadMaxRetries       = 5
 	DefaultTemporaryFileDir              = "./"
@@ -55,6 +53,7 @@ func init() {
 	handleError(viper.BindEnv("host"))
 	handleError(viper.BindEnv("youtube_api_key"))
 	handleError(viper.BindEnv("verification_token"))
+	handleError(viper.BindEnv("verification_secret"))
 
 	handleError(viper.BindEnv("resub_interval"))
 	handleError(viper.BindEnv("resub_target_addr"))
@@ -99,9 +98,7 @@ func init() {
 	handleError(viper.BindEnv("redis_idle_check_frequency"))
 
 	handleError(viper.BindEnv("boltdb_path"))
-	handleError(viper.BindEnv("stream_scheduler_retry_delay"))
 	handleError(viper.BindEnv("stream_scheduler_worker_interval"))
-	handleError(viper.BindEnv("stream_scheduler_max_retries"))
 
 	handleError(viper.BindEnv("amqp_dsn"))
 	handleError(viper.BindEnv("amqp_exchange"))
@@ -122,9 +119,7 @@ func init() {
 	viper.SetDefault("video_format_quality", DefaultFormatQuality)
 	viper.SetDefault("video_format_extension", DefaultFormatExtension)
 	viper.SetDefault("redis_channel", DefaultRedisChannel)
-	viper.SetDefault("stream_scheduler_retry_delay", DefaultStreamSchedulerRetryDelay)
 	viper.SetDefault("stream_scheduler_worker_interval", DefaultStreamSchedulerWorkerInterval)
-	viper.SetDefault("stream_scheduler_max_retries", DefaultStreamSchedulerMaxRetries)
 	viper.SetDefault("video_download_max_retries", DefaultVideoDownloadMaxRetries)
 	viper.SetDefault("temporary_file_dir", DefaultTemporaryFileDir)
 	viper.SetDefault("amqp_exchange", DefaultAMQPExchange)
@@ -151,11 +146,12 @@ type Validator interface {
 type Configuration struct {
 	validator Validator `validate:"required"`
 
-	YoutubeAPIKey     string `validate:"required"`
-	VerificationToken string `validate:"required"`
+	YoutubeAPIKey      string `validate:"required"`
+	VerificationToken  string `validate:"required"`
+	VerificationSecret string `validate:"required"`
 
 	ResubTargetAddr   string        `validate:"required"`
-	ResubTopic        string        `validate:"required"`
+	ResubTopics       []string      `validate:"required"`
 	ResubCallbackAddr string        `validate:"required"`
 	ResubInterval     time.Duration `validate:"required"`
 
@@ -197,9 +193,7 @@ type Configuration struct {
 	RedisIdleCheckFrequency time.Duration `validate:""`
 
 	BoltDBPath                    string        `validate:"omitempty,file"`
-	StreamSchedulerRetryDelay     time.Duration `validate:"required,min=0"`
 	StreamSchedulerWorkerInterval time.Duration `validate:"required,min=1000000000"`
-	StreamSchedulerMaxRetries     int           `validate:""`
 
 	AMQPDSN                string `validate:""`
 	AMQPExchange           string `validate:"required"`
@@ -219,10 +213,11 @@ func New() (c *Configuration) {
 
 	c.YoutubeAPIKey = viper.GetString("youtube_api_key")
 	c.VerificationToken = viper.GetString("verification_token")
+	c.VerificationSecret = viper.GetString("verification_secret")
 
 	c.ResubCallbackAddr = viper.GetString("resub_callback_addr")
 	c.ResubTargetAddr = viper.GetString("resub_target_addr")
-	c.ResubTopic = viper.GetString("resub_topic")
+	c.ResubTopics = viper.GetStringSlice("resub_topic")
 	c.ResubInterval = viper.GetDuration("resub_interval")
 
 	c.S3Endpoint = viper.GetString("s3_endpoint")
@@ -263,9 +258,7 @@ func New() (c *Configuration) {
 	c.RedisIdleCheckFrequency = viper.GetDuration("redis_idle_check_frequency")
 
 	c.BoltDBPath = viper.GetString("boltdb_path")
-	c.StreamSchedulerRetryDelay = viper.GetDuration("stream_scheduler_retry_delay")
 	c.StreamSchedulerWorkerInterval = viper.GetDuration("stream_scheduler_worker_interval")
-	c.StreamSchedulerMaxRetries = viper.GetInt("stream_scheduler_max_retries")
 
 	c.AMQPDSN = viper.GetString("amqp_dsn")
 	c.AMQPExchange = viper.GetString("amqp_exchange")
