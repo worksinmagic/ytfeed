@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	DefaultVersion                       = "v0.2.0"
+	DefaultVersion                       = "v0.1.0"
 	DefaultHost                          = ":8123"
 	DefaultResubTargetAddr               = "https://pubsubhubbub.appspot.com/subscribe"
 	DefaultResubInterval                 = 24 * 3 * time.Hour
