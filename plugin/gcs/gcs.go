@@ -10,8 +10,7 @@ import (
 )
 
 const (
-	DefaultCacheControl     = ""
-	DefaultVideoContentType = "video/mp4"
+	DefaultCacheControl = ""
 )
 
 type GCS struct {
@@ -45,9 +44,6 @@ func (g *GCS) Delete(ctx context.Context, name string) (err error) {
 func (g *GCS) SaveAs(ctx context.Context, name string, r io.Reader) (written int64, err error) {
 	w := g.cli.Bucket(g.bucketName).Object(name).NewWriter(ctx)
 	defer w.Close()
-
-	w.CacheControl = DefaultCacheControl
-	w.ContentType = DefaultVideoContentType
 
 	written, err = io.Copy(w, r)
 
