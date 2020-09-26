@@ -1,8 +1,8 @@
 # ytfeed
 [![Build Status](https://travis-ci.org/worksinmagic/ytfeed.svg?branch=master)](https://travis-ci.org/worksinmagic/ytfeed)
-[![GitHub](https://raw.githubusercontent.com/worksinmagic/ytfeed/master/LICENSE)](https://img.shields.io/github/license/worksinmagic/ytfeed)
-[![GitHub tag (latest by date)](https://github.com/worksinmagic/ytfeed/releases/latest)](https://img.shields.io/github/v/tag/worksinmagic/ytfeed)
-[![GitHub All Releases](https://github.com/worksinmagic/ytfeed/releases)](https://img.shields.io/github/downloads/worksinmagic/ytfeed/total)
+[![GitHub](https://img.shields.io/github/license/worksinmagic/ytfeed)](https://raw.githubusercontent.com/worksinmagic/ytfeed/master/LICENSE)
+[![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/worksinmagic/ytfeed)](https://github.com/worksinmagic/ytfeed/releases/latest)
+[![GitHub All Releases](https://img.shields.io/github/downloads/worksinmagic/ytfeed/total)](https://github.com/worksinmagic/ytfeed/releases)
 [![codecov](https://codecov.io/gh/worksinmagic/ytfeed/branch/master/graph/badge.svg)](https://codecov.io/gh/worksinmagic/ytfeed)
 [![GoDoc](https://godoc.org/github.com/worksinmagic/ytfeed?status.svg)](https://godoc.org/github.com/worksinmagic/ytfeed)
 [![Go Report Card](https://goreportcard.com/badge/github.com/worksinmagic/ytfeed)](https://goreportcard.com/report/github.com/worksinmagic/ytfeed)
