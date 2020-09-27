@@ -46,7 +46,7 @@ func Run(ctx context.Context, logger mainytfeed.Logger) (err error) {
 
 	var streamScheduler *streamschedule.StreamSchedule
 	if cfg.BoltDBPath != "" {
-		streamScheduler, err = streamschedule.New(logger, cfg.BoltDBPath, cfg.ResubCallbackAddr, cfg.StreamSchedulerRetryDelay, cfg.StreamSchedulerWorkerInterval, cfg.StreamSchedulerMaxRetries)
+		streamScheduler, err = streamschedule.New(logger, cfg.BoltDBPath, cfg.StreamSchedulerWorkerInterval)
 		if err != nil {
 			err = errors.Wrap(err, "failed to create stream scheduler service")
 			return
@@ -178,7 +178,7 @@ func Run(ctx context.Context, logger mainytfeed.Logger) (err error) {
 	}
 
 	// run workers
-	subscriber := autosubscribefeed.New(logger, cfg.VerificationToken, cfg.ResubTargetAddr, cfg.ResubTopic, cfg.ResubCallbackAddr, cfg.ResubInterval)
+	subscriber := autosubscribefeed.New(logger, cfg.VerificationToken, cfg.VerificationSecret, cfg.ResubTargetAddr, cfg.ResubCallbackAddr, cfg.ResubTopics, cfg.ResubInterval)
 	go func(ctx context.Context, subscriber *autosubscribefeed.Subscriber) {
 		err := subscriber.Subscribe(ctx)
 		if err != nil {
@@ -190,6 +190,7 @@ func Run(ctx context.Context, logger mainytfeed.Logger) (err error) {
 
 	if streamScheduler != nil {
 		go func(ctx context.Context, streamScheduler *streamschedule.StreamSchedule) {
+			streamScheduler.RegisterDataHandler(dataHandlers...)
 			err := streamScheduler.RunWorker(ctx)
 			if err != nil {
 				err = errors.Wrap(err, "stream scheduler worker exited with error")
@@ -201,7 +202,7 @@ func Run(ctx context.Context, logger mainytfeed.Logger) (err error) {
 
 	// declare handler functions
 	http.HandleFunc("/health", health.Handler)
-	http.HandleFunc("/", rss.Handler(ctx, logger, cfg.VerificationToken, dataHandlers...))
+	http.HandleFunc("/", rss.Handler(ctx, logger, cfg.VerificationToken, cfg.VerificationSecret, dataHandlers...))
 
 	// listen
 	errCh := make(chan error, 1)

@@ -34,13 +34,14 @@ func TestSubscriber(t *testing.T) {
 
 	logger := mock.NewMockLogger(ctrl)
 	verificationToken := "mytoken"
+	secret := "mysecret"
 	targetAddr := ts.URL
-	topic := "mytopic"
+	topics := []string{"mytopic", "yourtopic"}
 	callbackAddr := "http://localhost:9876"
 	resubInterval := 100 * time.Millisecond
 
 	t.Run("success", func(t *testing.T) {
-		s := New(logger, verificationToken, targetAddr, topic, callbackAddr, resubInterval)
+		s := New(logger, verificationToken, secret, targetAddr, callbackAddr, topics, resubInterval)
 		require.NotNil(t, s)
 
 		customHTTPClient := &http.Client{}
@@ -49,6 +50,12 @@ func TestSubscriber(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.TODO(), 200*time.Millisecond)
 		defer cancel()
 
+		// do this twice because we have two topics
+		logger.EXPECT().Infof(
+			gomock.AssignableToTypeOf("resubscribed"),
+			gomock.AssignableToTypeOf("topic"),
+			gomock.AssignableToTypeOf("callback address"),
+		)
 		logger.EXPECT().Infof(
 			gomock.AssignableToTypeOf("resubscribed"),
 			gomock.AssignableToTypeOf("topic"),
@@ -60,13 +67,14 @@ func TestSubscriber(t *testing.T) {
 	})
 
 	t.Run("failed", func(t *testing.T) {
-		s := New(logger, verificationToken, targetAddr, wrongTopic, callbackAddr, resubInterval)
+		topics := []string{wrongTopic}
+		s := New(logger, verificationToken, secret, targetAddr, callbackAddr, topics, resubInterval)
 		require.NotNil(t, s)
 
 		customHTTPClient := &http.Client{}
 		s.SetHTTPClient(customHTTPClient)
 
-		ctx, cancel := context.WithTimeout(context.TODO(), 200*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.TODO(), 150*time.Millisecond)
 		defer cancel()
 
 		logger.EXPECT().Errorf(

@@ -7,6 +7,7 @@ package mock
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
+	ytfeed "github.com/worksinmagic/ytfeed"
 	v3 "google.golang.org/api/youtube/v3"
 	io "io"
 	reflect "reflect"
@@ -168,13 +169,13 @@ func (m *MockStreamScheduler) EXPECT() *MockStreamSchedulerMockRecorder {
 }
 
 // RegisterSchedule mocks base method
-func (m *MockStreamScheduler) RegisterSchedule(runAt time.Time, xmlData, videoURL string) error {
-	ret := m.ctrl.Call(m, "RegisterSchedule", runAt, xmlData, videoURL)
+func (m *MockStreamScheduler) RegisterSchedule(runAt time.Time, data *ytfeed.Data) error {
+	ret := m.ctrl.Call(m, "RegisterSchedule", runAt, data)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RegisterSchedule indicates an expected call of RegisterSchedule
-func (mr *MockStreamSchedulerMockRecorder) RegisterSchedule(runAt, xmlData, videoURL interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterSchedule", reflect.TypeOf((*MockStreamScheduler)(nil).RegisterSchedule), runAt, xmlData, videoURL)
+func (mr *MockStreamSchedulerMockRecorder) RegisterSchedule(runAt, data interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterSchedule", reflect.TypeOf((*MockStreamScheduler)(nil).RegisterSchedule), runAt, data)
 }

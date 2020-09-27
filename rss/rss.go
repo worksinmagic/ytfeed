@@ -3,8 +3,12 @@ package rss
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -18,7 +22,7 @@ const (
 	YoutubeSubscriptionTopicPrefix = "https://www.youtube.com/xml/feeds/videos.xml?channel_id="
 )
 
-func Handler(ctx context.Context, logger ytfeed.Logger, verificationToken string, dataHandlers ...ytfeed.DataHandlerFunc) func(w http.ResponseWriter, req *http.Request) {
+func Handler(ctx context.Context, logger ytfeed.Logger, verificationToken, hmacSecret string, dataHandlers ...ytfeed.DataHandlerFunc) func(w http.ResponseWriter, req *http.Request) {
 	return func(w http.ResponseWriter, req *http.Request) {
 		defer req.Body.Close()
 
@@ -79,9 +83,22 @@ func Handler(ctx context.Context, logger ytfeed.Logger, verificationToken string
 			}
 			originalMessage := string(tmpRaw)
 
+			hmacHasher := hmac.New(sha1.New, []byte(hmacSecret))
+			var verified bool
+			verified, err = VerifyDataFeed(hmacHasher, req.Header.Get("X-Hub-Signature"), string(tmpRaw))
+			if err != nil {
+				w.WriteHeader(http.StatusForbidden)
+				fmt.Fprintf(w, "INVALID AUTHENTICATED CONTENT DISTRIBUTION SIGNATURE: %v", err)
+				return
+			}
+			if !verified {
+				w.WriteHeader(http.StatusForbidden)
+				fmt.Fprintf(w, "INVALID AUTHENTICATED CONTENT DISTRIBUTION SIGNATURE: not verified")
+				return
+			}
+
 			jbuf, err := xj.Convert(bytes.NewReader(tmpRaw))
 			if err != nil {
-				logger.Warnf("Failed to convert XML input to JSON: %v", err)
 				w.WriteHeader(http.StatusBadRequest)
 				fmt.Fprintf(w, "INVALID XML INPUT: %v", err)
 				return
@@ -123,4 +140,20 @@ func Handler(ctx context.Context, logger ytfeed.Logger, verificationToken string
 
 func IsYoutubeSubscriptionTopic(topic string) bool {
 	return strings.HasPrefix(topic, YoutubeSubscriptionTopicPrefix)
+}
+
+func VerifyDataFeed(hmacHasher hash.Hash, hmacHeader, xmlData string) (verified bool, err error) {
+	var hmacData []byte
+	hmacData, err = hex.DecodeString(strings.ReplaceAll(hmacHeader, "sha1=", ""))
+	if err != nil {
+		return
+	}
+	_, err = hmacHasher.Write([]byte(xmlData))
+	if err != nil {
+		return
+	}
+
+	verified = hmac.Equal(hmacData, hmacHasher.Sum(nil))
+
+	return
 }

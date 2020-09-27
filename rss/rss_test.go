@@ -28,6 +28,10 @@ const (
 	<published>2012-08-26T01:51:49+00:00</published>
 	<updated>2020-03-22T11:53:58.790881024+00:00</updated>
    </entry>`
+
+	sampleDataHmacHex = "sha1=b6996541be31719101d047bdcef1f1762d83f743"
+
+	hmacSecret = "mysecret"
 )
 
 func TestRss(t *testing.T) {
@@ -40,7 +44,7 @@ func TestRss(t *testing.T) {
 		require.NotNil(t, data)
 	}
 
-	handler := Handler(context.TODO(), logger, verificationToken, dataHandler)
+	handler := Handler(context.TODO(), logger, verificationToken, hmacSecret, dataHandler)
 	require.NotNil(t, handler)
 
 	t.Run("method GET", func(t *testing.T) {
@@ -190,6 +194,7 @@ func TestRss(t *testing.T) {
 			if err != nil {
 				panic(err)
 			}
+			req.Header.Set("X-Hub-Signature", sampleDataHmacHex)
 			rec := httptest.NewRecorder()
 
 			logger.EXPECT().Infof(
@@ -202,13 +207,45 @@ func TestRss(t *testing.T) {
 			require.Equal(t, http.StatusCreated, rec.Result().StatusCode)
 		})
 
-		t.Run("feed failed invalid XML", func(t *testing.T) {
+		t.Run("feed failed invalid hmac not hex", func(t *testing.T) {
 			body := bytes.NewBufferString(`{"data":"data"}`)
 			addr := "http://localhost:8080/"
 			req, err := http.NewRequest(http.MethodPost, addr, body)
 			if err != nil {
 				panic(err)
 			}
+			req.Header.Set("X-Hub-Signature", "random")
+			rec := httptest.NewRecorder()
+
+			handler(rec, req)
+
+			require.Equal(t, http.StatusForbidden, rec.Result().StatusCode)
+		})
+
+		t.Run("feed failed invalid hmac not verified", func(t *testing.T) {
+			body := bytes.NewBufferString(`{"data":"data"}`)
+			addr := "http://localhost:8080/"
+			req, err := http.NewRequest(http.MethodPost, addr, body)
+			if err != nil {
+				panic(err)
+			}
+			req.Header.Set("X-Hub-Signature", sampleDataHmacHex)
+			rec := httptest.NewRecorder()
+
+			handler(rec, req)
+
+			require.Equal(t, http.StatusForbidden, rec.Result().StatusCode)
+		})
+
+		t.Run("feed failed invalid XML", func(t *testing.T) {
+			body := bytes.NewBufferString(`{"data":"data"}`)
+			wrongDataHex := "sha1=87c70090fbae726b9ddc0383c2819040622d30e2"
+			addr := "http://localhost:8080/"
+			req, err := http.NewRequest(http.MethodPost, addr, body)
+			if err != nil {
+				panic(err)
+			}
+			req.Header.Set("X-Hub-Signature", wrongDataHex)
 			rec := httptest.NewRecorder()
 
 			logger.EXPECT().Errorf(

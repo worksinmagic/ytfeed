@@ -1,14 +1,9 @@
 package streamschedule
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"net/http"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -17,22 +12,12 @@ import (
 )
 
 const (
-	DefaultContentType         = "application/rss+xml"
 	DefaultFilePermission      = 0666
 	DefaultDatabaseOpenTimeout = time.Second
 	DefaultBucketName          = "ytfeed"
 
-	ErrFailedToResendFormat     = "failed to resend xml data with returned status code %d"
 	ErrFailedToDeleteKeysFormat = "failed to delete key(s): %s"
-
-	WarnExceedingRetriesFormat = "key %s is exceeding retries of %d"
-
-	InfiniteRetries = 0
 )
-
-type HTTPSender interface {
-	Post(url, contentType string, body io.Reader) (resp *http.Response, err error)
-}
 
 type Databaser interface {
 	Close() error
@@ -40,45 +25,46 @@ type Databaser interface {
 }
 
 type Schedule struct {
-	RunAt    time.Time `json:"run_at"`
-	XMLData  string    `json:"xml_data"`
-	VideoURL string    `json:"video_url"`
+	RunAt time.Time    `json:"run_at"`
+	Data  *ytfeed.Data `json:"data"`
 }
 
 type StreamSchedule struct {
 	logger         ytfeed.Logger
-	client         HTTPSender
-	targetURL      string
 	workerInterval time.Duration
 	database       Databaser
-	retryDelay     time.Duration
-	maxRetries     int
-
-	retriesKeysMap  map[string]int
-	retriesKeysLock sync.Mutex
+	dataHandlers   []ytfeed.DataHandlerFunc
 }
 
-func (s *StreamSchedule) RegisterSchedule(runAt time.Time, xmlData, videoURL string) (err error) {
+func (s *StreamSchedule) RegisterDataHandler(d ...ytfeed.DataHandlerFunc) {
+	s.dataHandlers = d
+}
+
+func (s *StreamSchedule) RegisterSchedule(runAt time.Time, data *ytfeed.Data) (err error) {
 	sch := Schedule{}
 	sch.RunAt = runAt
-	sch.XMLData = xmlData
-	sch.VideoURL = videoURL
+	sch.Data = data
+
+	// ignore deleted entry
+	if data.Feed.DeletedEntry.Link.Href != "" {
+		return
+	}
 
 	var rawData []byte
 	rawData, err = json.Marshal(sch)
 	if err != nil {
-		err = errors.Wrapf(err, "failed to json marshal schedule of video %s", sch.VideoURL)
+		err = errors.Wrapf(err, "failed to json marshal schedule of video %s", sch.Data.Feed.Entry.Link.Href)
 		return
 	}
 
 	err = s.database.Update(func(tx *bbolt.Tx) (err error) {
 		b := tx.Bucket([]byte(DefaultBucketName))
 
-		err = b.Put([]byte(sch.VideoURL), rawData)
+		err = b.Put([]byte(sch.Data.Feed.Entry.Link.Href), rawData)
 		return
 	})
 	if err != nil {
-		err = errors.Wrapf(err, "failed to schedule video %s", sch.VideoURL)
+		err = errors.Wrapf(err, "failed to schedule video %s", sch.Data.Feed.Entry.Link.Href)
 	}
 
 	return
@@ -89,7 +75,7 @@ func (s *StreamSchedule) RunWorker(ctx context.Context) (err error) {
 	defer ticker.Stop()
 
 	for {
-		err = s.work()
+		err = s.work(ctx)
 		if err != nil {
 			s.logger.Errorf("Failed to work: %v", err)
 		}
@@ -103,7 +89,7 @@ func (s *StreamSchedule) RunWorker(ctx context.Context) (err error) {
 	}
 }
 
-func (s *StreamSchedule) work() (err error) {
+func (s *StreamSchedule) work(ctx context.Context) (err error) {
 	err = s.database.Update(func(tx *bbolt.Tx) (err error) {
 		b := tx.Bucket([]byte(DefaultBucketName))
 
@@ -117,37 +103,9 @@ func (s *StreamSchedule) work() (err error) {
 			}
 
 			// time to resend messages
-			// if failed, we don't delete the key so it could be retried in the next pass
 			if time.Now().After(sch.RunAt) {
-				var resp *http.Response
-				resp, err = s.client.Post(s.targetURL, DefaultContentType, bytes.NewReader([]byte(sch.XMLData)))
-				if err != nil {
-					// if failed increment failure count for this key, if failed after n times, prepare for deletion
-					retry := s.incrementRetriesKey(string(k))
-
-					if !retry {
-						err = errors.Wrapf(err, "failed to resend xml data to %s with key %s", s.targetURL, string(k))
-					}
-
-					<-time.After(s.retryDelay)
-					return
-				}
-				defer resp.Body.Close()
-				defer func() {
-					_, _ = io.Copy(ioutil.Discard, resp.Body)
-				}()
-
-				if resp.StatusCode >= http.StatusBadRequest {
-					// if failed increment failure count for this key, if failed after n times, prepare for deletion
-					retry := s.incrementRetriesKey(string(k))
-
-					if !retry {
-						err = fmt.Errorf(ErrFailedToResendFormat, resp.StatusCode)
-						err = errors.Wrapf(err, "failed to resend xml data to %s with key %s", s.targetURL, string(k))
-					}
-
-					<-time.After(s.retryDelay)
-					return
+				for _, d := range s.dataHandlers {
+					go d(ctx, sch.Data)
 				}
 
 				// prepare the success key(s) to be deleted
@@ -159,19 +117,6 @@ func (s *StreamSchedule) work() (err error) {
 
 		// we collect the error(s) instead of straight jumping out at the first error
 		failedKeysToDelete := make([]FailedOperation, 0, len(successKeys))
-
-		// delete exceeding retries key(s)
-		for _, k := range s.failedRetriesKeys() {
-			// delete key from database
-			s.logger.Warnf(WarnExceedingRetriesFormat, k, s.maxRetries)
-			err = b.Delete([]byte(k))
-			if err != nil {
-				failedKeysToDelete = append(failedKeysToDelete, FailedOperation{
-					Error: err,
-					Key:   k,
-				})
-			}
-		}
 
 		// delete success keys
 		for _, k := range successKeys {
@@ -201,44 +146,6 @@ func (s *StreamSchedule) work() (err error) {
 	return
 }
 
-func (s *StreamSchedule) failedRetriesKeys() (keys []string) {
-	if s.maxRetries > InfiniteRetries {
-		keys = make([]string, 0, 16)
-
-		s.retriesKeysLock.Lock()
-		defer s.retriesKeysLock.Unlock()
-
-		for k, v := range s.retriesKeysMap {
-			if v > s.maxRetries {
-				keys = append(keys, k)
-
-				delete(s.retriesKeysMap, k)
-			}
-		}
-	}
-
-	return
-}
-
-func (s *StreamSchedule) incrementRetriesKey(key string) (retry bool) {
-	// only do this if not set to infinite retries
-	if s.maxRetries > InfiniteRetries {
-		s.retriesKeysLock.Lock()
-		defer s.retriesKeysLock.Unlock()
-
-		// increment the key
-		s.retriesKeysMap[key]++
-
-		// if key not exceeding max retries, set to retry
-		if s.retriesKeysMap[key] <= s.maxRetries {
-			retry = true
-			return
-		}
-	}
-
-	return
-}
-
 type FailedOperation struct {
 	Error error
 	Key   string
@@ -248,15 +155,10 @@ func (s *StreamSchedule) CloseDatabase() (err error) {
 	return s.database.Close()
 }
 
-func New(logger ytfeed.Logger, databasePath, targetURL string, retryDelay, workerInterval time.Duration, maxRetries int) (s *StreamSchedule, err error) {
+func New(logger ytfeed.Logger, databasePath string, workerInterval time.Duration) (s *StreamSchedule, err error) {
 	s = &StreamSchedule{}
 	s.logger = logger
-	s.targetURL = targetURL
 	s.workerInterval = workerInterval
-	s.retryDelay = retryDelay
-	s.client = http.DefaultClient
-	s.retriesKeysMap = map[string]int{}
-	s.maxRetries = maxRetries
 	s.database, err = bbolt.Open(databasePath, DefaultFilePermission, &bbolt.Options{Timeout: DefaultDatabaseOpenTimeout})
 	if err != nil {
 		return
