@@ -6,6 +6,7 @@ branches:
   only:
     - master
     - development
+    - /^v\d+\.\d+(\.\d+)?(-\S*)?$/
 
 services:
   - docker
