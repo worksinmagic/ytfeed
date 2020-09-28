@@ -7,7 +7,7 @@
 [![GoDoc](https://godoc.org/github.com/worksinmagic/ytfeed?status.svg)](https://godoc.org/github.com/worksinmagic/ytfeed)
 [![Go Report Card](https://goreportcard.com/badge/github.com/worksinmagic/ytfeed)](https://goreportcard.com/report/github.com/worksinmagic/ytfeed)
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fworksinmagic%2Fytfeed.svg?type=small)](https://app.fossa.io/projects/git%2Bgithub.com%2Fworksinmagic%2Fytfeed?ref=badge_small)
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://paypal.me/didasy)
+[![Donate](https://img.shields.io/badge/donate-patreon-blue)](https://www.patreon.com/worksinmagic)
 
 Automatic Youtube video and stream archiver.
 
